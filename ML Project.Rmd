@@ -1,0 +1,219 @@
+---
+title: "ML Project"
+author: "Jason O'Sullivan"
+date: "Saturday, December 20, 2014"
+output: html_document
+---
+
+The first step in any analysis is to understand the data available and what you are trying to model. In this case, the website and project information provide the required information. A number of people have been asked to perform an exercise both correctly and including common mistakes. The task here is use data provided by various accelerometers around the body and equiment to predict whether they are doing the correctly or which mistake they are making.
+
+The first thing we need to do is load the packages we plan on using.
+
+```{r}
+require(caret)
+require(matricies)
+require(randomForest)
+```
+
+Next we load the data in to R and apply handful of functions to help us  understand the data.
+
+```{r}
+pml_raw<-read.csv("pml-training.csv")
+head(pml_raw)
+summary(pml_raw)
+str(pml_raw)
+```
+
+Using this information a number of things become clear
+- There are a number of variables that are not really relevant. These mainly relate to information about the sessions and timing.
+- A number of other variables are summary statisics (eg averages, standard deviations, kurtosis, skewness, max, min). These are blank on many rows, and while they may be useful, for the time being it simpler to exclude them.
+- User name is also dropped. This was initially included but proved not overly predictive.
+
+This left 53 explanotory variables to work with. These are basically the key outputs from the measurement devices. We load these, along with the response variable, into objects use when subsetting.
+
+```{r}
+exp_vars<-c(
+  "roll_belt","pitch_belt","yaw_belt",
+  "total_accel_belt",
+  "gyros_belt_x","gyros_belt_y","gyros_belt_z",
+  "accel_belt_x","accel_belt_y","accel_belt_z",
+  "magnet_belt_x","magnet_belt_y","magnet_belt_z",
+  "roll_arm","pitch_arm","yaw_arm", 
+  "total_accel_arm",       
+  "gyros_arm_x","gyros_arm_y","gyros_arm_z",
+  "accel_arm_x","accel_arm_y","accel_arm_z",
+  "magnet_arm_x","magnet_arm_y","magnet_arm_z",
+  "total_accel_dumbbell",
+  "roll_dumbbell","pitch_dumbbell","yaw_dumbbell",
+  "gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z",
+  "accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z",
+  "magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z",       
+  "roll_forearm","pitch_forearm","yaw_forearm",
+  "total_accel_forearm",
+  "gyros_forearm_x","gyros_forearm_y","gyros_forearm_z",
+  "accel_forearm_x","accel_forearm_y","accel_forearm_z",
+  "magnet_forearm_x","magnet_forearm_y","magnet_forearm_z")
+resp_var<-"classe"
+```
+
+At this point I looked at the correlation matrix for these variables and it was very clear that a number of the variables are heavily correlated. A plot of a few of the variables below illustrates the point.
+
+
+```{r}
+cor(X_train)
+```
+
+This suggests in terms of preprocessing, that Principle Components may prove useful as it helps to ensure that variation spread across multiple variables is more effectively captured.
+
+At this point we need to split our data into the various parts required. Although there is a submission test set, because our sample size is substantial and one of the key questions is what we expect our out of sample accuracy to be, I split the data into 60% training, 20% cross validation and 20% test. 
+
+The seperate test set gives us the best estimate of this as it is kept seperate entirely from the model build process. We also set the seed to ensure the ability to replicate the process.
+
+Ideally we would've used a K-fold partition to create multiple test and cross-validation datasets. However runtime started to become an issue and hence I went with the single partition.
+
+We also need to make sure that we control for the values in the response variable to ensure we get an even spread of values in each of the datasets.
+
+First we will split off the 20% we need for the test dataset.
+
+```{r}
+set.seed(10001)
+part_test<-createDataPartition(pml_clean[[resp_var]],p=0.2,list=FALSE)
+X_test<-pml_clean[part_test,colnames(pml_clean)!=resp_var]
+Y_test<-as.factor(pml_clean[part_test,resp_var])
+pml_rest<-pml_clean[-part_test,]
+```
+
+Next we split the remaining 80% into 60% training and 20% cross-validation.
+
+```{r}
+part_train<-createDataPartition(pml_rest[["classe"]],p=0.75,list=FALSE)
+X_train<-pml_rest[part_train,colnames(pml_rest)!="classe"]
+Y_train<-as.factor(pml_rest[part_train,"classe"])
+X_cv<-pml_rest[-part_train,colnames(pml_rest)!="classe"]
+Y_cv<-as.factor(pml_rest[-part_train,"classe"])
+```
+
+
+Next we apply preprocessing. As discussed above, initially we will try using Principle Components to preprocess. We build this on the training set and then will need to apply it to both the training and the cross-validation sets.
+
+```{r}
+preproc<-preProcess(X_train,method="pca")
+X_train_pp<-predict(preproc,X_train)
+X_cv_pp<-predict(preproc,X_cv)
+```
+
+Strictly speaking it would be best to plot the cumulative precentage of variation explained by each component to identify the optimal number of components to keep. However, here we've left it at the default 95%.
+
+In terms of the Machine Learning approach to be used there are always various options. In this case the only limitation is the fact the response variable is categorical. There are a number of methods that could be used for this, however we will choose Random Forest as it tends to be a strong prediction approach.
+
+```{r}
+rf_mod <- randomForest(
+  x = X_train_pp,
+  y = Y_train,
+  importance = FALSE,
+  proximity = FALSE,
+  do.trace = FALSE,
+  keep.forrest = TRUE
+)
+```
+
+Based on the model dataset this approach seems quite accurate.
+
+```{r}
+Y_train_pred <- predict(rf_mod, X_train_pp)
+100*signif(mean(Y_train!=Y_train_pred),3)
+```
+
+Predicting the model set based on this model gives `r 100*signif(mean(Y_train!=Y_train_pred),3)`% error. So it perferctly predicts the training values of the response variable.
+
+Next we apply the model to the cross-validation dataset.
+
+```{r}
+Y_cv_pred <- predict(rf_mod, X_cv_pp)
+100*signif(mean(Y_cv!=Y_cv_pred),3)
+```
+
+This gives an error of `r 100*signif(mean(Y_cv!=Y_cv_pred),3)`%, so clearly this seems like a very strong model. However it is worth playing with some elements to see if we can improve the accuracy.
+
+Next we'll try using centreing and scaling instead of PCA as out pre-processing. It is worth noting that technically there is no need to centre and scale when using Random Forest. However it is good practice and having done it means you can try applying other techniques if required. To do this we simply need to repeat the previous steps, changing the options on the preProcess function.
+
+```{r}
+preproc<-preProcess(X_train,method = c("center", "scale"))
+X_train_pp<-predict(preproc,X_train)
+X_cv_pp<-predict(preproc,X_cv)
+rf_mod <- randomForest(
+  x = X_train_pp,
+  y = Y_train,
+  importance = FALSE,
+  proximity = FALSE,
+  do.trace = FALSE,
+  keep.forrest = TRUE
+)
+
+```
+Having rebuilt out model, we now need to test the predictive ability again.
+
+```{r}
+Y_train_pred <- predict(rf_mod, X_train_pp)
+100*signif(mean(Y_train!=Y_train_pred),3)
+Y_cv_pred <- predict(rf_mod, X_cv_pp)
+100*signif(mean(Y_cv!=Y_cv_pred),3)
+```
+
+Looking at the errors, we see `r 100*signif(mean(Y_train!=Y_train_pred),3)`% for the training data and `r 100*signif(mean(Y_cv!=Y_cv_pred),3)`% for the cross validation data.
+
+In this case we again see good model performance. 
+
+Applying to the cross validation set, we see that the better performance is backed up here. While we could certainly test additional approaches, given the high level of model performance at this stage, the potential additional improvement in accuracy would be minimial.
+
+Though Random Forest is somewhat difficult to interpret, there are some things we can do to understand our model. We can look at how useful each of the variables is in our model.
+
+```{r}
+varImpPlot(rf_mod,
+             sort=TRUE,
+             type=2, # var. imp. met. to use : 1=>decrease in acc. 2=>decrease in imp.
+             main="")
+title("RF variable importance : impurity metric")
+```
+
+Unfortunately I cannot work out how to include this, but it shows the belt measures (roll and yaw) are the most important, followed by the forearm pitch.
+
+At this stage, we can use the model we've created on our test set.
+Out of sample error exists for a variety of reasons
+- The sample we have built the model on might not exactly reflect the population.
+- The variables we have may not capture all the variation in the population.
+- We may have overfit the model and included variables that do not add predict power to the model.
+
+Using the test set will give us the best indication of how we expect our model to perform on new data. The cross-validation set is biased due to the fact we've used this set to help us pick our model. We only use the test set once we've settled on out final dataset.
+
+```{r}
+X_test_pp<-predict(preproc,X_test)
+Y_test_pred <- predict(rf_mod, X_test_pp)
+100*signif(mean(Y_test!=Y_test_pred),3)
+```
+
+Running this code, the accuracy we get on this dataset is `r 100*signif(mean(Y_test!=Y_test_pred),3)`%.
+
+This is the expected out of sample error for our model. Based on this we can be confident that the model we've derived will give a strong prediction of the variable on new data.
+
+All that remains at this point is to read in the 20 test cases that need to be submitted and repeat the exact same sets on these. As with the cross-validation set, we need to apply the transformations exactly as did on the training set before applying our model. 
+
+```{r}
+pred_raw<-read.csv("pml-testing.csv")
+pred_clean<-pred_raw[,exp_vars]
+X_pred_pp<-predict(preproc,pred_clean)
+Y_cv_pred <- predict(rf_mod, X_pred_pp)
+```
+
+We then output these for submission.
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(Y_cv_pred)
+```
