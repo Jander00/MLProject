@@ -124,7 +124,7 @@ Y_train_pred <- predict(rf_mod, X_train_pp)
 100*signif(mean(Y_train!=Y_train_pred),3)
 ```
 
-Predicting the model set based on this model gives `r 100*signif(mean(Y_train!=Y_train_pred),3)`% error. So it perferctly predicts the training values of the response variable.
+Predicting the model set based on this model gives 0% error. So it perferctly predicts the training values of the response variable.
 
 Next we apply the model to the cross-validation dataset.
 
@@ -133,7 +133,7 @@ Y_cv_pred <- predict(rf_mod, X_cv_pp)
 100*signif(mean(Y_cv!=Y_cv_pred),3)
 ```
 
-This gives an error of `r 100*signif(mean(Y_cv!=Y_cv_pred),3)`%, so clearly this seems like a very strong model. However it is worth playing with some elements to see if we can improve the accuracy.
+This gives an error of 2.88%, so clearly this seems like a very strong model. However it is worth playing with some elements to see if we can improve the accuracy.
 
 Next we'll try using centreing and scaling instead of PCA as out pre-processing. It is worth noting that technically there is no need to centre and scale when using Random Forest. However it is good practice and having done it means you can try applying other techniques if required. To do this we simply need to repeat the previous steps, changing the options on the preProcess function.
 
@@ -160,7 +160,7 @@ Y_cv_pred <- predict(rf_mod, X_cv_pp)
 100*signif(mean(Y_cv!=Y_cv_pred),3)
 ```
 
-Looking at the errors, we see `r 100*signif(mean(Y_train!=Y_train_pred),3)`% for the training data and `r 100*signif(mean(Y_cv!=Y_cv_pred),3)`% for the cross validation data.
+Looking at the errors, we see 0% for the training data and 0.79% for the cross validation data.
 
 In this case we again see good model performance. 
 
@@ -192,7 +192,7 @@ Y_test_pred <- predict(rf_mod, X_test_pp)
 100*signif(mean(Y_test!=Y_test_pred),3)
 ```
 
-Running this code, the accuracy we get on this dataset is `r 100*signif(mean(Y_test!=Y_test_pred),3)`%.
+Running this code, the error we get on this dataset is 0.815%.
 
 This is the expected out of sample error for our model. Based on this we can be confident that the model we've derived will give a strong prediction of the variable on new data.
 
